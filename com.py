@@ -4,7 +4,9 @@ import serial
 import serial.tools.list_ports
 import glob
 import datetime
+import json
 from PyQt5.QtCore import QThread, pyqtSignal
+
 
 
 def get_ports():
@@ -25,11 +27,15 @@ def get_ports():
 
 class ComUI:
 
-    def __init__(self) -> None:
+    def __init__(self,uart_json_path=None) -> None:
         pass
 
-    def init_com(self,parent):
-
+    def init_com(self,parent=None,uart_json_path=None):
+        #
+        self.uart_json_path=uart_json_path
+        assert self.uart_json_path and "uart_json_path is none."
+        #
+        self.titleLabel=parent.titleLabel
         self.comIdLabel=parent.comIdLabel
         self.brLabel=parent.brLabel
         self.dbLabel=parent.dbLabel
@@ -37,8 +43,9 @@ class ComUI:
         self.sbLabel=parent.sbLabel
         self.actionLabel=parent.actionLabel
         self.clearBtLabel=parent.clearBtLabel
+        self.uartTextLabel=parent.uartTextLabel
 
-        self.actionCheckBox=parent.actionCheckBox
+        self.actionButton=parent.actionButton
         self.comIdComboBox=parent.comIdComboBox
         self.brComboBox=parent.brComboBox
         self.dbComboBox=parent.dbComboBox
@@ -49,15 +56,17 @@ class ComUI:
         self.uartText=parent.uartText
 
         ##
+        self.titleLabel.setText('串口配置')
         self.comIdLabel.setText('端口')
         self.brLabel.setText('波特率')
         self.dbLabel.setText('数据位')
         self.pbLabel.setText('检验位')
         self.sbLabel.setText('停止位')
         self.actionLabel.setText('串口操作')
-        self.actionCheckBox.setText('关闭')
+        self.actionButton.setText('打开')
         self.clearBtLabel.setText('显示操作')
         self.clearButton.setText('清屏')
+        self.uartTextLabel.setText('串口终端')
         ##
         self.uartText.setReadOnly(True)
         ##
@@ -69,11 +78,33 @@ class ComUI:
         self.pbComboBox.addItems(['Even','Odd'])
         self.sbComboBox.addItems(['1','2'])
         ##
-        self.actionCheckBox.clicked.connect(self.on_action)
+        self.actionButton.clicked.connect(self.on_action)
         self.comIdComboBox.activated.connect(self.on_update_ports)
         self.clearButton.clicked.connect(self.on_clear_uart_text)
         ##
         self.com=None
+        ##
+        self.rst_history()
+
+    def rst_history(self):
+        items=[
+            ['port',self.comIdComboBox],
+            ['br',self.brComboBox],
+            ['pb',self.pbComboBox],
+            ['sb',self.sbComboBox],
+            ['db',self.dbComboBox]
+        ]
+        with open(self.uart_json_path,'r') as rf:
+            data=json.load(rf)
+            for item in items:
+                k=item[0]
+                v=data[k]
+                view=item[1]
+                index = view.findText(v)
+                if index != -1:
+                    # 如果找到了该值，设置当前选中的索引
+                    view.setCurrentIndex(index)               
+        pass
 
     def on_update_ports(self):
         ports1=get_ports()
@@ -88,24 +119,24 @@ class ComUI:
         bytesize=int(self.dbComboBox.currentText())
         stopbits=int(self.sbComboBox.currentText())
         # 判断复选框是否被选中
-        if self.actionCheckBox.isChecked():
-            self.com=Uart()
-            self.com.config(port=selected_text,baudrate=baudrate,bytesize=bytesize,stopbits=stopbits)
-            self.com.open()
-            self.freeze_ui(False)
-            # print('selected_text',selected_text)
-            # 如果选中，更新标签的文本
-            self.actionCheckBox.setText('打开')
-            # self.com.set_callback(callback=on_receive,screen=self.uartText)
-            # ComUI.display_data(screen=self.uartText,data='123123')
-            self.com.data_signal.connect(self.on_receive)
+        if self.actionButton.text()=='打开':
+            if selected_text:
+                self.on_save_config()
+                self.com=Uart()
+                self.com.config(port=selected_text,baudrate=baudrate,bytesize=bytesize,stopbits=stopbits)
+                self.com.open()
+                self.freeze_ui(False)
+                self.actionButton.setText('关闭')
+                self.com.data_signal.connect(self.on_receive)
+            else:
+                self.actionCheckBox.setChecked(False)
         else:
             # 如果未选中，更新标签的文本
-            self.actionCheckBox.setEnabled(False)
+            self.actionButton.setEnabled(False)
             self.com.close()
-            self.actionCheckBox.setText('关闭')
+            self.actionButton.setText('打开')
             self.freeze_ui(True)
-            self.actionCheckBox.setEnabled(True)
+            self.actionButton.setEnabled(True)
 
 
     def freeze_ui(self,status):
@@ -127,7 +158,23 @@ class ComUI:
     
     def on_clear_uart_text(self):
         self.uartText.clear()
-
+    
+    def on_save_config(self):
+        items=[
+            ['port',self.comIdComboBox],
+            ['br',self.brComboBox],
+            ['pb',self.pbComboBox],
+            ['sb',self.sbComboBox],
+            ['db',self.dbComboBox]
+        ]
+        data={}
+        for item in items:
+            k=item[0]
+            view=item[1]
+            v=view.currentText()
+            data[k]=v
+        with open(self.uart_json_path,'w') as wf:
+            json.dump(data,wf,indent=2)
 
 
 
@@ -156,9 +203,6 @@ class Uart(QThread):
         print('port:{},baudrate:{},bytesize:{},stopbits:{},timeout:{}\n'.format(
         self.com.port,self.com.baudrate,self.com.bytesize,self.com.stopbits,self.com.timeout))
 
-    # def set_callback(self,callback=None,screen=None):
-    #     self.callback=callback
-    #     self.screen=screen
 
     def open(self):
         self.com.open()
@@ -179,27 +223,12 @@ class Uart(QThread):
         # data = self.com.readline()
         if data:
             self.data_signal.emit(data)
-            print('data',data)
-        # if self.callback is None or len(data)==0:
-        #     pass
-        # else:
-        #     self.callback(data=data,screen=self.screen)
+            # print('data',data)
 
     def run(self):
         while self.running:
             if self.com.in_waiting>0:
                 self.read()
 
-    # def run(self):
-    #     try:
-    #         while True:
-    #             data = self.serial_port.readline().decode('utf-8', errors='ignore').strip()
-    #             if data:
-    #                 self.data_signal.emit(data)
-    #             time.sleep(0.1)
-    #     except Exception as e:
-    #         print(f"串口读取错误: {e}")
-    #     finally:
-    #         self.serial_port.close()
 
     

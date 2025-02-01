@@ -24,3 +24,6 @@ venv/
  
 # Jupyter Notebook 检查点文件
 .ipynb_checkpoints/
+
+#pyinstaller
+*.spec
