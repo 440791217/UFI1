@@ -1,13 +1,12 @@
 import json
-import os
-import subprocess
-import threading
 import time
 import json
-import os
 import random
-import shutil
 import datetime
+import os
+from injector import GDBServer, Injector
+from soupsieve.util import lower
+from pygdbmi.gdbcontroller import GdbController
 
 from PyQt5.QtGui import QIntValidator
 from PyQt5.QtWidgets import  QMessageBox
@@ -65,7 +64,7 @@ class FiUI:
         self.action1Label.setText('启动')
         self.injTextLabel.setText('注错终端')
         ##
-        self.modeComboBox.addItems(['寄存器'])
+        self.modeComboBox.addItems(['RF'])
         self.bfmComboBox.addItems(['1'])
         self.numLineEdit.setText('1')
         self.timesLineEdit.setText('1000')
@@ -88,7 +87,9 @@ class FiUI:
         self.rst_history()
         #
         self.gdbserver=None
-        self.gdb=None
+        self.injector=None
+        self.buffer1=None #临时文件
+        self.comUI.com.data_signal.connect(self.on_receive_gdb)
 
         pass
 
@@ -126,7 +127,8 @@ class FiUI:
             self.resetCheckBox.setText('是')
         else:
             self.resetCheckBox.setText('否')
-    
+            # self.freeze_ui(status=False)
+            # self.action1Button.setText('停止')
     def on_reset(self):
         self.enable_reset(status=self.resetCheckBox.isChecked())
 
@@ -170,31 +172,47 @@ class FiUI:
             item[1].setEnabled(status)
 
     def on_action(self):
+
         if self.action1Button.text()=='启动':
             #
             if not (self.comUI.com and self.comUI.com.running):
                 self.show_dialog_for_uart()
                 return
             if not self.show_dialog_for_comfirm():
-                return 
+                return
             #
-            self.on_save_config()
             self.freeze_ui(status=False)
             self.action1Button.setText('停止')
+            #
+            self.on_save_config()
             #
             self.gen_faults()
             #
             self.gdbserver=GDBServer()
             self.gdbserver.data_signal.connect(self.on_receive_gdbserver)
             self.gdbserver.start()
+            time.sleep(2)
+            self.injector=Injector()
+            self.injector.set_elf_bin(' ')
+            self.injector.set_gdb_bin('arm-none-eabi-gdb')
+            self.injector.faults_json_path=self.faults_json_path
+            self.injector.data_signal.connect(self.on_receive_gdb)
+            self.injector.running=True
+            self.injector.start()
         else:
-            self.freeze_ui(status=True)
-            self.action1Button.setText('启动')
+            #
+            if self.injector:
+                self.injector.running=False
+                time.sleep(5)
+                self.injector=None
             #
             if self.gdbserver:
                 self.gdbserver.close()
                 self.gdbserver=None
-    
+            #
+            self.freeze_ui(status=True)
+            self.action1Button.setText('启动')
+        
     def remote_connect_gdbserver(self):
         self.gdbserver=GDBServer()
     
@@ -227,7 +245,7 @@ class FiUI:
             code=data['code']
         else:
             code=0
-        msg=data['msg']
+        # msg=data['msg']
         print(data)
         if code!=0:
             self.freeze_ui(status=True)
@@ -238,6 +256,56 @@ class FiUI:
             self.gdbserver.close()
             self.gdbserver=None
     
+    def on_receive_gdb(self,data):
+        type=data['type']
+        msg=data['msg']
+        if 'COMPLETED_TASK' in msg:
+            #
+            if self.injector:
+                self.injector.running=False
+                time.sleep(5)
+                self.injector=None
+            #
+            if self.gdbserver:
+                self.gdbserver.close()
+                self.gdbserver=None
+            #
+            self.freeze_ui(status=True)
+            self.action1Button.setText('启动')
+            return            
+        # print('on_receive_gdb',msg)
+        if 'WF_HEAD' in msg:
+            self.buffer1=[]
+        if self.buffer1 is not None:
+            now = datetime.datetime.now()
+            tf = now.strftime("%Y-%m-%d %H:%M:%S.%f")
+            tf_data = '{}>>{}'.format(tf, msg)
+            self.buffer1.append(tf_data+'\n')
+            #
+            self.injText.append(tf_data)
+            # 自动滚动到最新消息
+            scrollbar = self.injText.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+        if 'WF_END' in msg:
+            fault=data['fault']
+            print('fault',fault)
+            fault=json.loads(fault)
+            app=fault['app']
+            mode=fault['mode']
+            id=fault['id']
+            appPath=os.path.join('./out',app)
+            if not os.path.exists(appPath):
+                os.mkdir(appPath)
+            modePath=os.path.join(appPath,mode)
+            if not os.path.exists(modePath):
+                os.mkdir(modePath)
+            fp=os.path.join(modePath,'{:05d}.txt'.format(id))
+            with open(fp,'w') as wf:
+                for ln in self.buffer1:
+                    wf.write(ln)
+                    # print('ln',ln)
+                self.buffer1=None
+
     def gen_rf_faults(self,reg_collection,reg_width,bfm,fault):
         random_regs = random.sample(reg_collection, 1)
         for reg in random_regs:
@@ -260,7 +328,7 @@ class FiUI:
         num=int(data['num'])
         times=int(data['times'])
         reset=data['reset']
-        reg_collection = ['r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9','r10' ,'r11', 'r12', 'r13', 'r14', 'r15']
+        reg_collection = ['r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9','r10' ,'r11', 'r12', 'sp', 'lr', 'pc']
         reg_width=32
         # print('reset',reset)
         if reset:
@@ -268,76 +336,41 @@ class FiUI:
             for i in range(int(times)):
                 before_tm = random.random() * 1+1
                 fault = {
+                    'app':app,
+                    'mode':mode,
                     'id': i,
+                    'num':num,
                     'regs': [],
                     'before_tm': before_tm,
                     'flips': [],
                     'injected': False
                 }
-                if mode=='寄存器':
+                if mode=='RF':
                     fault=self.gen_rf_faults(reg_collection=reg_collection,reg_width=reg_width,bfm=bfm,fault=fault)
                 faults.append(fault)
             with open(self.faults_json_path,'w') as wf:
                 json.dump(faults,wf,indent=2)
-
-
-
-JLINK_RET_CODE_MAP = {
-    0: 'No error. GDB Server closed normally.',
-    -1: 'Unknown error. Should not happen.',
-    -2: 'Failed to open listener port (Default: 2331).',
-    -3: 'Could not connect to target. No target voltage detected or connection failed.',
-    -4: 'Failed to accept a connection from GDB.',
-    -5: 'Failed to parse the command line options, wrong or missing command line parameter.',
-    -6: 'Unknown or no device name set.',
-    -7: 'Failed to connect to J-Link.'
-}
-
-
-class GDBServer(QThread):
-    data_signal = pyqtSignal(dict)
-    def __init__(self):
-        super().__init__()
-        # assert log_file
-        self.command = 'JLinkGDBServer -port 2331 -device STM32F407ZG -endian little -speed 4000 -if swd -vd -nogui'.split()
-        self.proc = None
-        self.running = False
-        self.returncode = 0
-        self.returnmsg = ''
-
-    def set_log_file(self, log_file):
-        self.log_file = log_file
-
-    def set_command(self, command):
-        self.command = command
-
-    def close(self):
-        assert (self.proc)
-        self.proc.terminate()
-        self.running = False
-
-    def run(self):
-        assert self.command
-        self.running = True
-        self.proc = subprocess.Popen(self.command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     text=True)
-        std, err = self.proc.communicate()
-        self.returncode = self.proc.poll()
-        # if self.returncode > 127:
-        #     self.returncode = self.returncode - 256
-        self.running = False
-        ret_code_map = JLINK_RET_CODE_MAP
-        if self.returncode in ret_code_map.keys():
-            ret_msg = ret_code_map[self.returncode]
         else:
-            ret_msg = 'Unkown Error Message!'
-        self.returnmsg=ret_msg
-        data={
-            'code':self.returncode,
-            'msg':ret_msg
-        }
-        self.data_signal.emit(data)
-        pass
+            with open(self.faults_json_path,'r') as rf:
+                faults=json.load(rf)
+        return faults
+
+    def delete_all_files_in_directory(self,directory):
+        # 检查目录是否存在
+        if os.path.exists(directory):
+            # 遍历目录中的所有文件和子目录
+            for root, dirs, files in os.walk(directory):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        # 删除文件
+                        os.remove(file_path)
+                        print(f"已删除文件: {file_path}")
+                    except Exception as e:
+                        print(f"删除文件 {file_path} 时出错: {e}")
+        else:
+            print(f"目录 {directory} 不存在。")
+
 
 
 

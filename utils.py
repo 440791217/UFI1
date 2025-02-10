@@ -30,7 +30,7 @@ class System:
         self.inj_json_path=self.get_inj_json_path()
         inj_json={
             'app':'app',
-            'mode':'寄存器',
+            'mode':'RF',
             'bfm':'1',
             'num':'1',
             'times':'1000',

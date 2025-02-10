@@ -18,7 +18,6 @@ class my_mainwindow(object):
         #init com
         self.comUI=ComUI()
         self.comUI.init_com(parent=self.myui,uart_json_path=self.system.get_uart_json_path())
-
         #init fi
         self.fiUI=FiUI()
         self.fiUI.init_fi(parent=self.myui,

@@ -26,11 +26,10 @@ def get_ports():
 
 
 class ComUI:
-
     def __init__(self,uart_json_path=None) -> None:
         pass
 
-    def init_com(self,parent=None,uart_json_path=None):
+    def init_com(self,parent=None,uart_json_path=None,signalEmitter=None):
         #
         self.uart_json_path=uart_json_path
         assert self.uart_json_path and "uart_json_path is none."
@@ -82,7 +81,7 @@ class ComUI:
         self.comIdComboBox.activated.connect(self.on_update_ports)
         self.clearButton.clicked.connect(self.on_clear_uart_text)
         ##
-        self.com=None
+        self.com=Uart()
         ##
         self.rst_history()
 
@@ -122,7 +121,6 @@ class ComUI:
         if self.actionButton.text()=='打开':
             if selected_text:
                 self.on_save_config()
-                self.com=Uart()
                 self.com.config(port=selected_text,baudrate=baudrate,bytesize=bytesize,stopbits=stopbits)
                 self.com.open()
                 self.freeze_ui(False)
@@ -148,10 +146,11 @@ class ComUI:
         self.sbComboBox.setEnabled(status)
 
     def on_receive(self,data):
+        msg=data['msg']
         now = datetime.datetime.now()
         tf = now.strftime("%Y-%m-%d %H:%M:%S.%f")
-        tf_data = '{}>>{}'.format(tf, data)
-        self.uartText.append(tf_data)
+        tf_msg = '{}>>{}'.format(tf, msg)
+        self.uartText.append(tf_msg)
         # 自动滚动到最新消息
         scrollbar = self.uartText.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
@@ -179,7 +178,7 @@ class ComUI:
 
 
 class Uart(QThread):
-    data_signal = pyqtSignal(str)
+    data_signal = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
@@ -189,8 +188,6 @@ class Uart(QThread):
         self.com.baudrate = 115200  # 设置波特率
         self.com.bytesize = 8  # 设置数据位
         self.com.stopbits = 1  # 设置停止位
-        self.callback=None
-        self.screen=None
         pass
 
     def config(self,port=None,baudrate=115200,bytesize=8,stopbits=1,timeout=0.1):
@@ -213,15 +210,18 @@ class Uart(QThread):
 
     def close(self):
         self.running=False
-        self.callback=None
         time.sleep(0.3)
         self.com.close()
 
     def read(self):
         # data = self.com.read(size=self.com.in_waiting)
-        data = self.com.readline().decode('utf-8', errors='ignore').strip()
+        msg = self.com.readline().decode('utf-8', errors='ignore').strip()
         # data = self.com.readline()
-        if data:
+        if msg:
+            data={
+                'type':0,
+                'msg':msg
+            }
             self.data_signal.emit(data)
             # print('data',data)
 
