@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>800</width>
-    <height>600</height>
+    <height>687</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -281,9 +281,41 @@
       <x>180</x>
       <y>280</y>
       <width>611</width>
-      <height>251</height>
+      <height>341</height>
      </rect>
     </property>
+   </widget>
+   <widget class="QWidget" name="formLayoutWidget_3">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>540</y>
+      <width>160</width>
+      <height>80</height>
+     </rect>
+    </property>
+    <layout class="QFormLayout" name="formLayout_3">
+     <item row="0" column="0">
+      <widget class="QLabel" name="title2Label">
+       <property name="text">
+        <string>title2</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QWidget" name="title2Widget" native="true"/>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="autoLaunchLabel">
+       <property name="text">
+        <string>autoLaunch</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QCheckBox" name="autoLaunchCheckBox"/>
+     </item>
+    </layout>
    </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar">

@@ -39,6 +39,9 @@ class FiUI:
         self.action1Label=parent.action1Label
         self.injTextLabel=parent.injTextLabel
 
+        self.title2Label=parent.title2Label
+        self.autoLaunchLabel=parent.autoLaunchLabel
+
         self.appLineEdit=parent.appLineEdit
         self.modeComboBox=parent.modeComboBox
         self.bfmComboBox=parent.bfmComboBox
@@ -48,8 +51,8 @@ class FiUI:
         self.cpuComboBox=parent.cpuComboBox
         self.resetCheckBox=parent.resetCheckBox
         self.action1Button=parent.action1Button
-
         self.injText=parent.injText
+        self.autoLaunchCheckBox=parent.autoLaunchCheckBox
 
         ##
         self.title1Label.setText('注错配置')
@@ -63,6 +66,8 @@ class FiUI:
         self.resetLabel.setText('清空记录')
         self.action1Label.setText('启动')
         self.injTextLabel.setText('注错终端')
+        self.title2Label.setText('系统配置')
+        self.autoLaunchLabel.setText('开机自启')
         ##
         self.modeComboBox.addItems(['RF'])
         self.bfmComboBox.addItems(['1'])
@@ -82,7 +87,48 @@ class FiUI:
         self.appLineEdit.setMaxLength(10)
         #
         self.resetCheckBox.clicked.connect(self.on_reset)
+        # if self.action1Button.text()=='启动':
+        #     #
+        #     if not (self.comUI.com and self.comUI.com.running):
+        #         self.show_dialog_for_uart()
+        #         return
+        #     if not self.show_dialog_for_comfirm():
+        #         return
+        #     #
+        #     self.freeze_ui(status=False)
+        #     self.action1Button.setText('停止')
+        #     #
+        #     self.on_save_config()
+        #     #
+        #     self.gen_faults()
+        #     #
+        #     self.gdbserver=GDBServer()
+        #     self.gdbserver.data_signal.connect(self.on_receive_gdbserver)
+        #     self.gdbserver.start()
+        #     time.sleep(2)
+        #     if self.gdbserver.running:
+        #         self.injector=Injector()
+        #         self.injector.set_elf_bin(' ')
+        #         self.injector.set_gdb_bin('arm-none-eabi-gdb')
+        #         self.injector.faults_json_path=constant.faults_json
+        #         self.injector.data_signal.connect(self.on_receive_gdb)
+        #         self.injector.running=True
+        #         self.injector.start()
+        # else:
+        #     #
+        #     if self.injector:
+        #         self.injector.running=False
+        #         time.sleep(5)
+        #         self.injector=None
+        #     #
+        #     if self.gdbserver:
+        #         self.gdbserver.close()
+        #         self.gdbserver=None
+        #     #
+        #     self.freeze_ui(status=True)
+        #     self.action1Button.setText('启动')
         self.action1Button.clicked.connect(self.on_action)
+        self.autoLaunchCheckBox.clicked.connect(self.on_launch)
         #
         self.rst_history()
         #
@@ -102,7 +148,8 @@ class FiUI:
             ['times',self.timesLineEdit],
             ['arch',self.archComboBox],
             ['cpu',self.cpuComboBox],
-            ['reset',self.resetCheckBox]
+            ['reset',self.resetCheckBox],
+            ['launch',self.autoLaunchCheckBox]
         ]
         with open(self.inj_json_path,'r') as rf:
             data=json.load(rf)
@@ -112,8 +159,8 @@ class FiUI:
                 view=item[1]
                 if k in ['num','times','app']:
                     view.setText(v)
-                elif k in ['reset']:
-                    self.enable_reset(status=v)
+                elif k in ['reset','launch']:
+                    self.enable_checkbox(status=v,checkbox=view)
                 else:
                     index = view.findText(v)
                     if index != -1:
@@ -121,16 +168,16 @@ class FiUI:
                         view.setCurrentIndex(index)               
         pass
     
-    def enable_reset(self,status):
-        self.resetCheckBox.setChecked(status)
+    def enable_checkbox(self,status,checkbox):
+        checkbox.setChecked(status)
         if status:
-            self.resetCheckBox.setText('是')
+            checkbox.setText('是')
         else:
-            self.resetCheckBox.setText('否')
+            checkbox.setText('否')
             # self.freeze_ui(status=False)
             # self.action1Button.setText('停止')
     def on_reset(self):
-        self.enable_reset(status=self.resetCheckBox.isChecked())
+        self.enable_checkbox(status=self.resetCheckBox.isChecked(),checkbox=self.resetCheckBox)
 
     def on_save_config(self):
         items=[
@@ -141,7 +188,8 @@ class FiUI:
             ['times',self.timesLineEdit],
             ['arch',self.archComboBox],
             ['cpu',self.cpuComboBox],
-            ['reset',self.resetCheckBox]
+            ['reset',self.resetCheckBox],
+            ['launch',self.autoLaunchCheckBox]
         ]
         data={}
         for item in items:
@@ -149,7 +197,7 @@ class FiUI:
             view=item[1]
             if k in ['num','times','app']:
                 v=view.text()
-            elif k in ['reset']:
+            elif k in ['reset','launch']:
                 v=view.isChecked()
             else:
                 v=view.currentText()
@@ -166,7 +214,8 @@ class FiUI:
             ['times',self.timesLineEdit],
             ['arch',self.archComboBox],
             ['cpu',self.cpuComboBox],
-            ['reset',self.resetCheckBox]
+            ['reset',self.resetCheckBox],
+            # ['launch',self.autoLaunchCheckBox]
         ]
         for item in items:
             item[1].setEnabled(status)
@@ -192,13 +241,14 @@ class FiUI:
             self.gdbserver.data_signal.connect(self.on_receive_gdbserver)
             self.gdbserver.start()
             time.sleep(2)
-            self.injector=Injector()
-            self.injector.set_elf_bin(' ')
-            self.injector.set_gdb_bin('arm-none-eabi-gdb')
-            self.injector.faults_json_path=self.faults_json_path
-            self.injector.data_signal.connect(self.on_receive_gdb)
-            self.injector.running=True
-            self.injector.start()
+            if self.gdbserver.running:
+                self.injector=Injector()
+                self.injector.set_elf_bin(' ')
+                self.injector.set_gdb_bin('arm-none-eabi-gdb')
+                self.injector.faults_json_path=self.faults_json_path
+                self.injector.data_signal.connect(self.on_receive_gdb)
+                self.injector.running=True
+                self.injector.start()
         else:
             #
             if self.injector:
@@ -212,6 +262,11 @@ class FiUI:
             #
             self.freeze_ui(status=True)
             self.action1Button.setText('启动')
+    
+    def on_launch(self):
+        self.enable_checkbox(status=self.autoLaunchCheckBox.isChecked(),checkbox=self.autoLaunchCheckBox)
+        self.on_save_config()
+        pass
         
     def remote_connect_gdbserver(self):
         self.gdbserver=GDBServer()
@@ -330,6 +385,11 @@ class FiUI:
         reset=data['reset']
         reg_collection = ['r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9','r10' ,'r11', 'r12', 'sp', 'lr', 'pc']
         reg_width=32
+
+        if not os.path.exists(self.faults_json_path):
+            QMessageBox.information(self.action1Button, '提示信息', '没有找到上次任务的故障文件，本次会产生新的故障文件。', QMessageBox.Ok)
+            reset=True
+
         # print('reset',reset)
         if reset:
             faults=[]

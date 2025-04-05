@@ -49,11 +49,27 @@ class GDBServer(QThread):
 
     def run(self):
         assert self.command
-        self.running = True
-        self.proc = subprocess.Popen(self.command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     text=True)
-        std, err = self.proc.communicate()
-        self.returncode = self.proc.poll()
+       
+        # 创建子进程
+        self.proc = subprocess.Popen(self.command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        # 实时读取输出
+        while True:
+            # 读取一行输出
+            output = self.proc.stdout.readline()
+            if output == '' and self.proc.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+                if 'Connected to target' in output:
+                     self.running = True
+                    # data={
+                        # 'type':1,
+                        # 'code':40,
+                        # 'msg':'Connected to target'
+                    # }
+                    # self.data_signal.emit(data)
+        # 等待子进程结束
+        self.returncode = self.proc.wait()
         if self.returncode > 127:
             self.returncode = self.returncode - 256
         self.running = False
@@ -69,6 +85,26 @@ class GDBServer(QThread):
             'msg':ret_msg
         }
         self.data_signal.emit(data)
+        print(f"子进程返回码: {self.returncode}")
+        # self.proc = subprocess.Popen(self.command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        #                              text=True)
+        # std, err = self.proc.communicate()
+        # self.returncode = self.proc.poll()
+        # if self.returncode > 127:
+        #     self.returncode = self.returncode - 256
+        # self.running = False
+        # ret_code_map = JLINK_RET_CODE_MAP
+        # if self.returncode in ret_code_map.keys():
+        #     ret_msg = ret_code_map[self.returncode]
+        # else:
+        #     ret_msg = 'Unkown Error Message!'
+        # self.returnmsg=ret_msg
+        # data={
+        #     'type':1,
+        #     'code':self.returncode,
+        #     'msg':ret_msg
+        # }
+        # self.data_signal.emit(data)
         pass
 
 

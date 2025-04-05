@@ -1,0 +1,3 @@
+        if not os.path.exists(self.faults_json_path):
+            QMessageBox.information(self.action1Button, '提示信息', '没有找到上次任务的故障文件，本次会产生新的故障文件。', QMessageBox.Ok)
+            reset=True

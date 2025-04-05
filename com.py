@@ -223,12 +223,12 @@ class Uart(QThread):
                 'msg':msg
             }
             self.data_signal.emit(data)
-            # print('data',data)
+            print('com data',data)
 
     def run(self):
         while self.running:
-            if self.com.in_waiting>0:
-                self.read()
+            # if self.com.in_waiting>0:
+            self.read()
 
 
     

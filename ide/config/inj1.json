@@ -1,0 +1,10 @@
+{
+  "app": "",
+  "mode": "MEM",
+  "bfm": "1",
+  "injnum": "0.00001",
+  "exenum": "500",
+  "mem_addr": "8001600",
+  "space_size": "3EA00",
+  "executable": "/home/mark/tmp/dnn_llvm.out"
+}

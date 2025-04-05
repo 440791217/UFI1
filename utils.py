@@ -37,6 +37,7 @@ class System:
             'arch':'Cortex-M4',
             'cpu':'STM32F407',
             'reset':False,
+            'launch':False
         }
         self.uart_json_path=self.get_uart_json_path()
         uart_json={
